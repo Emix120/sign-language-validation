@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Sign Language TFLite Validation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-4 font-sans">
+
+    <header class="text-center my-4">
+        <h1 class="text-3xl font-extrabold tracking-tight text-indigo-400">SignSync TFLite Edge</h1>
+        <p class="text-slate-400 text-sm mt-1">On-Device Real-Time Edge Engine</p>
+    </header>
+
+    <main class="w-full max-w-md bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
+        <div class="relative aspect-video bg-black flex items-center justify-center">
+            <video id="webcam" autoplay playsinline class="w-full h-full object-cover"></video>
+            
+            <span class="absolute top-3 left-3 bg-indigo-600 text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
+                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></span> EDGE ACCELERATED
+            </span>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                <span class="text-slate-400 font-medium">Predicted Class:</span>
+                <span id="predictionResult" class="text-2xl font-black text-emerald-400 tracking-wide">Loading Model...</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-slate-400 font-medium">Confidence Score:</span>
+                <span id="confidenceResult" class="text-xl font-bold text-indigo-300">-</span>
+            </div>
+        </div>
+    </main>
+
+    <footer class="my-4 text-center">
+        <div id="status" class="text-xs bg-slate-800 px-4 py-2 rounded-full border border-slate-700 inline-block text-amber-400">
+            Initializing Engine WASM Modules...
+        </div>
+    </footer>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const predictionResult = document.getElementById('predictionResult');
+        const confidenceResult = document.getElementById('confidenceResult');
+        const statusDiv = document.getElementById('status');
+
+        let tfliteModel;
+        
+        // ---------------------------------------------------------------
+        // ⚠️ EDIT THIS TO MATCH YOUR 8 CLASSES IN CORRECT TRAINING ORDER
+        // ---------------------------------------------------------------
+        const CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
+
+        // Initialize System and Load TFLite Model
+        async function init() {
+            try {
+                statusDiv.textContent = "Loading TFLite Model locally...";
+                // Load your model from the directory path
+                tfliteModel = await tflite.loadTFLiteModel('./sign_language_model.tflite');
+                
+                statusDiv.textContent = "Accessing device hardware camera...";
+                await setupCamera();
+                
+                statusDiv.textContent = "System active.";
+                statusDiv.className = "text-xs bg-emerald-950 text-emerald-400 px-4 py-2 rounded-full border border-emerald-800 inline-block";
+                
+                // Fire off continuous detection loop
+                runInferenceLoop();
+            } catch (error) {
+                statusDiv.textContent = "Error: " + error.message;
+                statusDiv.className = "text-xs bg-red-950 text-red-400 px-4 py-2 rounded-full border border-red-800 inline-block";
+                console.error(error);
+            }
+        }
+
+        // Setup Device Webcam Access
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "user", width: 480, height: 480 },
+                audio: false
+            });
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => resolve(video);
+            });
+        }
+
+        // Inference Engine Loop Execution
+        async function runInferenceLoop() {
+            tf.engine().startScope();
+            try {
+                const frameTensor = tf.browser.fromPixels(video);
+                
+                // PREPROCESSING: Match the exact dimensions your Keras model was trained on!
+                // (e.g., 224, 224 or 64, 64)
+                const resized = tf.image.resizeBilinear(frameTensor, [224, 224]);
+                
+                // Normalization: Scales pixels between 0 and 1 if required by your model
+                const normalized = resized.div(255.0);
+                
+                // Add batch dimension: returns shape [1, 224, 224, 3]
+                const inputTensor = normalized.expandDims(0);
+
+                // Execute the .tflite model inside client memory
+                const outputTensor = tfliteModel.predict(inputTensor);
+                const scores = await outputTensor.data();
+
+                // Get the index of the highest probability value
+                const maxScoreIdx = scores.indexOf(Math.max(...scores));
+                const confidence = scores[maxScoreIdx];
+
+                // Render metrics securely to user dashboard 
+                predictionResult.textContent = CLASSES[maxScoreIdx];
+                confidenceResult.textContent = `${(confidence * 100).toFixed(1)}%`;
+
+            } catch (err) {
+                console.error("Inference Error:", err);
+            }
+            tf.engine().endScope();
+
+            // Request next frame execution loop
+            requestAnimationFrame(runInferenceLoop);
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
