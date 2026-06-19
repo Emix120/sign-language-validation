@@ -6,8 +6,8 @@
     <title>Real-Time Sign Language Validation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <script src="https://unpkg.com/@tensorflow/tfjs/dist/tf.min.js"></script>
-    <script src="https://unpkg.com/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
+    <script src="./tf.js"></script>
+    <script src="./tf-tflite.js"></script>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-4 font-sans">
 
@@ -54,14 +54,14 @@
         // ---------------------------------------------------------------
         // ⚠️ YOUR 8 CLASSES IN PRECISE TRAINING ORDER
         // ---------------------------------------------------------------
-        const CLASSES = CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
+        const CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
 
         async function init() {
             try {
                 statusDiv.textContent = "Setting up local variables...";
                 
-                // Pointing to an alternative mirror path to bypass local ISP blockages
-                tflite.setWasmPath('https://unpkg.com/@tensorflow/tfjs-tflite/dist/');
+                // CRITICAL FIX: Point directly to our local file package root
+                tflite.setWasmPath('./');
                 await tf.ready();
                 
                 statusDiv.textContent = "Loading model binaries...";
