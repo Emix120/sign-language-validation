@@ -42,7 +42,7 @@
         </div>
     </footer>
 
-    <script>
+<script>
         const video = document.getElementById('webcam');
         const predictionResult = document.getElementById('predictionResult');
         const confidenceResult = document.getElementById('confidenceResult');
@@ -51,78 +51,76 @@
         let tfliteModel;
         
         // ---------------------------------------------------------------
-        // ⚠️ EDIT THIS TO MATCH YOUR 8 CLASSES IN CORRECT TRAINING ORDER
+        // CLASSES MATRIX IN PRECISE TRAINING SEQUENCE
         // ---------------------------------------------------------------
         const CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
 
-        // Initialize System and Load TFLite Model
         async function init() {
             try {
-                statusDiv.textContent = "Loading TFLite Model locally...";
-                // Load your model from the directory path
-                tfliteModel = await tflite.loadTFLiteModel('./sign_language_model.tflite');
+                statusDiv.textContent = "Loading Engine Modules...";
                 
-                statusDiv.textContent = "Accessing device hardware camera...";
+                // Force check initialization of the environment layer
+                await tf.ready();
+                
+                statusDiv.textContent = "Downloading TFLite file into memory...";
+                
+                // We use a clean relative path call structure to bypass CORS restriction bugs
+                tfliteModel = await tflite.loadTFLiteModel('sign_language_model.tflite');
+                
+                statusDiv.textContent = "Connecting to phone hardware camera...";
                 await setupCamera();
                 
                 statusDiv.textContent = "System active.";
                 statusDiv.className = "text-xs bg-emerald-950 text-emerald-400 px-4 py-2 rounded-full border border-emerald-800 inline-block";
                 
-                // Fire off continuous detection loop
                 runInferenceLoop();
             } catch (error) {
-                statusDiv.textContent = "Error: " + error.message;
+                statusDiv.textContent = "Initialization Failed: " + error.message;
                 statusDiv.className = "text-xs bg-red-950 text-red-400 px-4 py-2 rounded-full border border-red-800 inline-block";
                 console.error(error);
             }
         }
 
-        // Setup Device Webcam Access
         async function setupCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: 480, height: 480 },
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
                 audio: false
             });
             video.srcObject = stream;
             return new Promise((resolve) => {
-                video.onloadedmetadata = () => resolve(video);
+                video.onloadedmetadata = () => {
+                    video.play();
+                    resolve(video);
+                };
             });
         }
 
-        // Inference Engine Loop Execution
         async function runInferenceLoop() {
             tf.engine().startScope();
             try {
-                const frameTensor = tf.browser.fromPixels(video);
-                
-                // PREPROCESSING: Match the exact dimensions your Keras model was trained on!
-                // (e.g., 224, 224 or 64, 64)
-                const resized = tf.image.resizeBilinear(frameTensor, [224, 224]);
-                
-                // Normalization: Scales pixels between 0 and 1 if required by your model
-                const normalized = resized.div(255.0);
-                
-                // Add batch dimension: returns shape [1, 224, 224, 3]
-                const inputTensor = normalized.expandDims(0);
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    const frameTensor = tf.browser.fromPixels(video);
+                    
+                    // PREPROCESSING LAYER: Match model size (e.g., 224x224)
+                    const resized = tf.image.resizeBilinear(frameTensor, [224, 224]);
+                    
+                    // Normalization normalization layer scaling (0.0 - 1.0)
+                    const normalized = resized.div(255.0);
+                    const inputTensor = normalized.expandDims(0);
 
-                // Execute the .tflite model inside client memory
-                const outputTensor = tfliteModel.predict(inputTensor);
-                const scores = await outputTensor.data();
+                    const outputTensor = tfliteModel.predict(inputTensor);
+                    const scores = await outputTensor.data();
 
-                // Get the index of the highest probability value
-                const maxScoreIdx = scores.indexOf(Math.max(...scores));
-                const confidence = scores[maxScoreIdx];
+                    const maxScoreIdx = scores.indexOf(Math.max(...scores));
+                    const confidence = scores[maxScoreIdx];
 
-                // Render metrics securely to user dashboard 
-                predictionResult.textContent = CLASSES[maxScoreIdx];
-                confidenceResult.textContent = `${(confidence * 100).toFixed(1)}%`;
-
+                    predictionResult.textContent = CLASSES[maxScoreIdx];
+                    confidenceResult.textContent = `${(confidence * 100).toFixed(1)}%`;
+                }
             } catch (err) {
-                console.error("Inference Error:", err);
+                console.error("Frame Inference Error:", err);
             }
             tf.engine().endScope();
-
-            // Request next frame execution loop
             requestAnimationFrame(runInferenceLoop);
         }
 
