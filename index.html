@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Sign Language TFLite Validation</title>
+    <title>Real-Time Sign Language Validation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
@@ -17,7 +17,7 @@
 
     <main class="w-full max-w-md bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
         <div class="relative aspect-video bg-black flex items-center justify-center">
-            <video id="webcam" autoplay playsinline class="w-full h-full object-cover"></video>
+            <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
             
             <span class="absolute top-3 left-3 bg-indigo-600 text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
                 <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></span> EDGE ACCELERATED
@@ -27,7 +27,7 @@
         <div class="p-6 space-y-4">
             <div class="flex justify-between items-center border-b border-slate-700 pb-3">
                 <span class="text-slate-400 font-medium">Predicted Class:</span>
-                <span id="predictionResult" class="text-2xl font-black text-emerald-400 tracking-wide">Loading Model...</span>
+                <span id="predictionResult" class="text-2xl font-black text-emerald-400 tracking-wide">Waiting...</span>
             </div>
             <div class="flex justify-between items-center">
                 <span class="text-slate-400 font-medium">Confidence Score:</span>
@@ -36,13 +36,13 @@
         </div>
     </main>
 
-    <footer class="my-4 text-center">
-        <div id="status" class="text-xs bg-slate-800 px-4 py-2 rounded-full border border-slate-700 inline-block text-amber-400">
-            Initializing Engine WASM Modules...
+    <footer class="my-4 text-center w-full max-w-md px-4">
+        <div id="status" class="text-xs bg-slate-800 px-4 py-2 rounded-full border border-slate-700 inline-block text-amber-400 w-full break-words">
+            Initializing Engine Modules...
         </div>
     </footer>
 
-<script>
+    <script>
         const video = document.getElementById('webcam');
         const predictionResult = document.getElementById('predictionResult');
         const confidenceResult = document.getElementById('confidenceResult');
@@ -51,39 +51,42 @@
         let tfliteModel;
         
         // ---------------------------------------------------------------
-        // CLASSES MATRIX IN PRECISE TRAINING SEQUENCE
+        // ⚠️ EDIT THIS TO MATCH YOUR 8 CLASSES IN CORRECT TRAINING ORDER
         // ---------------------------------------------------------------
         const CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
 
         async function init() {
             try {
-                statusDiv.textContent = "Loading Engine Modules...";
+                statusDiv.textContent = "Setting up backend files...";
                 
-                // Force check initialization of the environment layer
+                // CRITICAL FIX: Explicitly direct the browser to the exact working CDN location for WASM files
+                tflite.setWasmPath('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/');
+                
                 await tf.ready();
                 
-                statusDiv.textContent = "Downloading TFLite file into memory...";
+                statusDiv.textContent = "Downloading sign_language_model.tflite...";
+                // Load your local model file
+                tfliteModel = await tflite.loadTFLiteModel('./sign_language_model.tflite');
                 
-                // We use a clean relative path call structure to bypass CORS restriction bugs
-                tfliteModel = await tflite.loadTFLiteModel('sign_language_model.tflite');
-                
-                statusDiv.textContent = "Connecting to phone hardware camera...";
+                statusDiv.textContent = "Requesting camera permissions...";
                 await setupCamera();
                 
-                statusDiv.textContent = "System active.";
-                statusDiv.className = "text-xs bg-emerald-950 text-emerald-400 px-4 py-2 rounded-full border border-emerald-800 inline-block";
+                statusDiv.textContent = "System active! Ready for validation.";
+                statusDiv.className = "text-xs bg-emerald-950 text-emerald-400 px-4 py-2 rounded-full border border-emerald-800 inline-block w-full";
+                predictionResult.textContent = "Scan your hand";
                 
                 runInferenceLoop();
             } catch (error) {
-                statusDiv.textContent = "Initialization Failed: " + error.message;
-                statusDiv.className = "text-xs bg-red-950 text-red-400 px-4 py-2 rounded-full border border-red-800 inline-block";
+                // If it fails, this will print the exact mechanical error onto your phone screen
+                statusDiv.textContent = "Error Logged: " + error.message;
+                statusDiv.className = "text-xs bg-red-950 text-red-400 px-4 py-2 rounded-full border border-red-800 inline-block w-full break-words";
                 console.error(error);
             }
         }
 
         async function setupCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+                video: { facingMode: "user", width: 640, height: 480 },
                 audio: false
             });
             video.srcObject = stream;
@@ -101,10 +104,8 @@
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     const frameTensor = tf.browser.fromPixels(video);
                     
-                    // PREPROCESSING LAYER: Match model size (e.g., 224x224)
+                    // PREPROCESSING: Change [224, 224] if your Keras input layer used a different shape
                     const resized = tf.image.resizeBilinear(frameTensor, [224, 224]);
-                    
-                    // Normalization normalization layer scaling (0.0 - 1.0)
                     const normalized = resized.div(255.0);
                     const inputTensor = normalized.expandDims(0);
 
@@ -118,7 +119,7 @@
                     confidenceResult.textContent = `${(confidence * 100).toFixed(1)}%`;
                 }
             } catch (err) {
-                console.error("Frame Inference Error:", err);
+                console.error("Inference execution loop error:", err);
             }
             tf.engine().endScope();
             requestAnimationFrame(runInferenceLoop);
