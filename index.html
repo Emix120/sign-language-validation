@@ -60,8 +60,10 @@
             try {
                 statusDiv.textContent = "Setting up local variables...";
                 
-                // CRITICAL FIX: Point directly to our local file package root
-                tflite.setWasmPath('./');
+                // CRITICAL FIX: Direct the engine to find the .wasm binary using your explicit Vercel domain location
+                const absolutePath = window.location.origin + '/';
+                tflite.setWasmPath(absolutePath);
+                
                 await tf.ready();
                 
                 statusDiv.textContent = "Loading model binaries...";
