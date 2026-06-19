@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Real-Time Sign Language Validation</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
+    
+    <script src="https://unpkg.com/@tensorflow/tfjs/dist/tf.min.js"></script>
+    <script src="https://unpkg.com/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-4 font-sans">
 
@@ -53,18 +54,20 @@
         // ---------------------------------------------------------------
         // ⚠️ YOUR 8 CLASSES IN PRECISE TRAINING ORDER
         // ---------------------------------------------------------------
-        const CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
+        const CLASSES = CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
 
         async function init() {
             try {
-                statusDiv.textContent = "Setting up engine parameters...";
-                tflite.setWasmPath('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/');
+                statusDiv.textContent = "Setting up local variables...";
+                
+                // Pointing to an alternative mirror path to bypass local ISP blockages
+                tflite.setWasmPath('https://unpkg.com/@tensorflow/tfjs-tflite/dist/');
                 await tf.ready();
                 
-                statusDiv.textContent = "Loading AI classification architecture...";
+                statusDiv.textContent = "Loading model binaries...";
                 tfliteModel = await tflite.loadTFLiteModel('./sign_language_model.tflite');
                 
-                statusDiv.textContent = "Opening camera stream...";
+                statusDiv.textContent = "Booting camera interface...";
                 await setupCamera();
                 
                 statusDiv.textContent = "System active! Ready for validation.";
@@ -73,19 +76,14 @@
                 
                 runInferenceLoop();
             } catch (error) {
-                statusDiv.textContent = "Error: " + error.message;
+                statusDiv.textContent = "Error Log: " + error.message;
                 statusDiv.className = "text-xs bg-red-950 text-red-400 px-4 py-2 rounded-full border border-red-800 inline-block w-full break-words";
             }
         }
 
         async function setupCamera() {
-            // High-compatibility constraints payload for mobile browsers
             const constraints = {
-                video: {
-                    facingMode: "user",
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                },
+                video: { facingMode: "user", width: 640, height: 480 },
                 audio: false
             };
 
@@ -95,16 +93,14 @@
                 
                 return new Promise((resolve) => {
                     video.onloadedmetadata = () => {
-                        // Explicitly call play to handle browsers requiring user interaction
                         video.play().then(resolve).catch(err => {
-                            // Fallback if browser blocks auto-play profiles
-                            statusDiv.textContent = "Tap screen to wake up camera feed.";
+                            statusDiv.textContent = "Tap screen anywhere to activate stream.";
                             document.body.addEventListener('click', () => video.play().then(resolve), { once: true });
                         });
                     };
                 });
             } catch (err) {
-                throw new Error("Camera hardware initialization failed. Please verify site permissions.");
+                throw new Error("Camera frame collection rejected.");
             }
         }
 
@@ -113,8 +109,6 @@
             try {
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     const frameTensor = tf.browser.fromPixels(video);
-                    
-                    // PREPROCESSING MATCH: Adjust array structure to [224, 224] or your exact model size
                     const resized = tf.image.resizeBilinear(frameTensor, [224, 224]);
                     const normalized = resized.div(255.0);
                     const inputTensor = normalized.expandDims(0);
@@ -129,7 +123,7 @@
                     confidenceResult.textContent = `${(confidence * 100).toFixed(1)}%`;
                 }
             } catch (err) {
-                console.error("Inference Error:", err);
+                console.error("Loop inference error", err);
             }
             tf.engine().endScope();
             requestAnimationFrame(runInferenceLoop);
