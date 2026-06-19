@@ -17,7 +17,7 @@
 
     <main class="w-full max-w-md bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
         <div class="relative aspect-video bg-black flex items-center justify-center">
-            <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            <video id="webcam" autoplay playsinline muted loop webkit-playsinline class="w-full h-full object-cover"></video>
             
             <span class="absolute top-3 left-3 bg-indigo-600 text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
                 <span class="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></span> EDGE ACCELERATED
@@ -51,51 +51,61 @@
         let tfliteModel;
         
         // ---------------------------------------------------------------
-        // ⚠️ EDIT THIS TO MATCH YOUR 8 CLASSES IN CORRECT TRAINING ORDER
+        // ⚠️ YOUR 8 CLASSES IN PRECISE TRAINING ORDER
         // ---------------------------------------------------------------
         const CLASSES = ['Call Me', 'Fuck You', 'Love You', 'Rock On', 'Small Amount','Thumbs Down', 'Thumbs Up'];
 
         async function init() {
             try {
-                statusDiv.textContent = "Setting up backend files...";
-                
-                // CRITICAL FIX: Explicitly direct the browser to the exact working CDN location for WASM files
+                statusDiv.textContent = "Setting up engine parameters...";
                 tflite.setWasmPath('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/');
-                
                 await tf.ready();
                 
-                statusDiv.textContent = "Downloading sign_language_model.tflite...";
-                // Load your local model file
+                statusDiv.textContent = "Loading AI classification architecture...";
                 tfliteModel = await tflite.loadTFLiteModel('./sign_language_model.tflite');
                 
-                statusDiv.textContent = "Requesting camera permissions...";
+                statusDiv.textContent = "Opening camera stream...";
                 await setupCamera();
                 
                 statusDiv.textContent = "System active! Ready for validation.";
                 statusDiv.className = "text-xs bg-emerald-950 text-emerald-400 px-4 py-2 rounded-full border border-emerald-800 inline-block w-full";
-                predictionResult.textContent = "Scan your hand";
+                predictionResult.textContent = "Scan hand gesture";
                 
                 runInferenceLoop();
             } catch (error) {
-                // If it fails, this will print the exact mechanical error onto your phone screen
-                statusDiv.textContent = "Error Logged: " + error.message;
+                statusDiv.textContent = "Error: " + error.message;
                 statusDiv.className = "text-xs bg-red-950 text-red-400 px-4 py-2 rounded-full border border-red-800 inline-block w-full break-words";
-                console.error(error);
             }
         }
 
         async function setupCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: 640, height: 480 },
+            // High-compatibility constraints payload for mobile browsers
+            const constraints = {
+                video: {
+                    facingMode: "user",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
                 audio: false
-            });
-            video.srcObject = stream;
-            return new Promise((resolve) => {
-                video.onloadedmetadata = () => {
-                    video.play();
-                    resolve(video);
-                };
-            });
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        // Explicitly call play to handle browsers requiring user interaction
+                        video.play().then(resolve).catch(err => {
+                            // Fallback if browser blocks auto-play profiles
+                            statusDiv.textContent = "Tap screen to wake up camera feed.";
+                            document.body.addEventListener('click', () => video.play().then(resolve), { once: true });
+                        });
+                    };
+                });
+            } catch (err) {
+                throw new Error("Camera hardware initialization failed. Please verify site permissions.");
+            }
         }
 
         async function runInferenceLoop() {
@@ -104,7 +114,7 @@
                 if (video.readyState === video.HAVE_ENOUGH_DATA) {
                     const frameTensor = tf.browser.fromPixels(video);
                     
-                    // PREPROCESSING: Change [224, 224] if your Keras input layer used a different shape
+                    // PREPROCESSING MATCH: Adjust array structure to [224, 224] or your exact model size
                     const resized = tf.image.resizeBilinear(frameTensor, [224, 224]);
                     const normalized = resized.div(255.0);
                     const inputTensor = normalized.expandDims(0);
@@ -119,7 +129,7 @@
                     confidenceResult.textContent = `${(confidence * 100).toFixed(1)}%`;
                 }
             } catch (err) {
-                console.error("Inference execution loop error:", err);
+                console.error("Inference Error:", err);
             }
             tf.engine().endScope();
             requestAnimationFrame(runInferenceLoop);
